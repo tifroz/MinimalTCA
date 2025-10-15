@@ -1,5 +1,6 @@
-// 122 Lines by Claude Sonnet
+// 228 Lines by Claude Sonnet
 // Minimal TCA: Comprehensive tests demonstrating testability
+// Extended with Scope composition tests
 
 import Testing
 @testable import MinimalTCA
@@ -133,5 +134,146 @@ struct EffectTests {
     let effect = Effect<Int>.send(42)
     let send = Send<Int> { _ in }
     await effect.run(send: send)
+  }
+}
+
+// MARK: - Scope Composition Tests
+
+@MainActor
+@Suite("Scope Tests")
+struct ScopeTests {
+  @Test("Scope forwards child actions to child reducer")
+  func testScopeForwardsChildActions() async throws {
+    let store = TestStore(
+      initialState: AppReducer.State(
+        counter: CounterReducer.State(count: 0),
+        appTitle: "Initial"
+      ),
+      reducer: AppReducer()
+    )
+
+    // Send child action through parent
+    await store.send(.counter(.increment)) { state in
+      state.counter.count = 1
+      state.appTitle = "Counter incremented!" // Parent reacts to child action
+    }
+  }
+
+  @Test("Scope ignores non-child actions")
+  func testScopeIgnoresNonChildActions() async throws {
+    let store = TestStore(
+      initialState: AppReducer.State(
+        counter: CounterReducer.State(count: 5),
+        appTitle: "Initial"
+      ),
+      reducer: AppReducer()
+    )
+
+    // Send parent-only action
+    await store.send(.updateTitle("New Title")) { state in
+      state.appTitle = "New Title"
+      // Counter state unchanged
+      #expect(state.counter.count == 5)
+    }
+  }
+
+  @Test("Child reducer updates child state slice")
+  func testChildReducerUpdatesChildState() async throws {
+    let store = Store(
+      initialState: AppReducer.State(
+        counter: CounterReducer.State(count: 0),
+        appTitle: "App"
+      ),
+      reducer: AppReducer()
+    )
+
+    // Child actions update child state
+    await store.send(.counter(.increment))
+    #expect(store.currentState.counter.count == 1)
+
+    await store.send(.counter(.increment))
+    #expect(store.currentState.counter.count == 2)
+
+    await store.send(.counter(.decrement))
+    #expect(store.currentState.counter.count == 1)
+  }
+
+  @Test("Parent can observe and react to child actions")
+  func testParentReactsToChildActions() async throws {
+    let store = Store(
+      initialState: AppReducer.State(
+        counter: CounterReducer.State(count: 0),
+        appTitle: "Initial"
+      ),
+      reducer: AppReducer()
+    )
+
+    // Parent reacts to child increment
+    await store.send(.counter(.increment))
+    #expect(store.currentState.appTitle == "Counter incremented!")
+
+    // Other child actions don't change parent title
+    await store.send(.counter(.decrement))
+    #expect(store.currentState.appTitle == "Counter incremented!")
+  }
+}
+
+// MARK: - CasePath Tests
+
+@Suite("CasePath Tests")
+struct CasePathTests {
+  enum TestAction: Equatable, Sendable {
+    case child(String)
+    case parent(Int)
+  }
+
+  @Test("CasePath extracts matching cases")
+  func testExtractMatchingCase() {
+    let casePath = CasePath<TestAction, String>(
+      extract: { action in
+        if case .child(let value) = action {
+          return value
+        }
+        return nil
+      },
+      embed: { .child($0) }
+    )
+
+    let childAction: TestAction = .child("test")
+    let extracted = casePath.extract(from: childAction)
+    #expect(extracted == "test")
+  }
+
+  @Test("CasePath returns nil for non-matching cases")
+  func testExtractNonMatchingCase() {
+    let casePath = CasePath<TestAction, String>(
+      extract: { action in
+        if case .child(let value) = action {
+          return value
+        }
+        return nil
+      },
+      embed: { .child($0) }
+    )
+
+    let parentAction: TestAction = .parent(42)
+    let extracted = casePath.extract(from: parentAction)
+    #expect(extracted == nil)
+  }
+
+  @Test("CasePath embeds values correctly")
+  func testEmbedValue() {
+    let casePath = CasePath<TestAction, String>(
+      extract: { action in
+        if case .child(let value) = action {
+          return value
+        }
+        return nil
+      },
+      embed: { .child($0) }
+    )
+
+    let action = casePath.embed("hello")
+    #expect(action == .child("hello"))
   }
 }
