@@ -1,6 +1,7 @@
-// 228 Lines by Claude Sonnet
+// 362 Lines by Claude Sonnet
 // Minimal TCA: Comprehensive tests demonstrating testability
 // Extended with Scope composition tests
+// Extended with ForEach collection tests
 
 import Testing
 @testable import MinimalTCA
@@ -275,5 +276,195 @@ struct CasePathTests {
 
     let action = casePath.embed("hello")
     #expect(action == .child("hello"))
+  }
+}
+
+// MARK: - ForEach Collection Tests
+
+@MainActor
+@Suite("ForEach Tests")
+struct ForEachTests {
+  @Test("ForEach routes actions to correct element by ID")
+  func testForEachRoutesActions() async throws {
+    let store = Store(
+      initialState: CountersApp.State(),
+      reducer: CountersApp()
+    )
+
+    // Add some counters
+    await store.send(.addCounter)
+    #expect(store.currentState.counters.count == 1)
+    #expect(store.currentState.totalCount == 0)
+
+    // Get the first counter's ID
+    guard let firstID = store.currentState.counters.first?.id else {
+      Issue.record("No counter found")
+      return
+    }
+
+    // Increment specific counter
+    await store.send(.counters(.element(id: firstID, action: .increment)))
+    #expect(store.currentState.counters[id: firstID]?.count == 1)
+    #expect(store.currentState.totalCount == 1)
+  }
+
+  @Test("ForEach manages multiple elements independently")
+  func testMultipleElementsIndependently() async throws {
+    let store = Store(
+      initialState: CountersApp.State(),
+      reducer: CountersApp()
+    )
+
+    // Add three counters
+    await store.send(.addCounter)
+    await store.send(.addCounter)
+    await store.send(.addCounter)
+
+    #expect(store.currentState.counters.count == 3)
+
+    // Get IDs
+    let ids = store.currentState.counters.ids
+    #expect(ids.count == 3)
+
+    // Increment first counter twice
+    await store.send(.counters(.element(id: ids[0], action: .increment)))
+    await store.send(.counters(.element(id: ids[0], action: .increment)))
+
+    // Increment second counter once
+    await store.send(.counters(.element(id: ids[1], action: .increment)))
+
+    // Third counter remains at 0
+    #expect(store.currentState.counters[id: ids[0]]?.count == 2)
+    #expect(store.currentState.counters[id: ids[1]]?.count == 1)
+    #expect(store.currentState.counters[id: ids[2]]?.count == 0)
+    #expect(store.currentState.totalCount == 3)
+  }
+
+  @Test("ForEach handles element removal")
+  func testElementRemoval() async throws {
+    let store = Store(
+      initialState: CountersApp.State(),
+      reducer: CountersApp()
+    )
+
+    // Add counters
+    await store.send(.addCounter)
+    await store.send(.addCounter)
+
+    let ids = store.currentState.counters.ids
+    #expect(ids.count == 2)
+
+    // Increment first counter
+    await store.send(.counters(.element(id: ids[0], action: .increment)))
+    #expect(store.currentState.counters[id: ids[0]]?.count == 1)
+
+    // Remove first counter
+    await store.send(.removeCounter(id: ids[0]))
+    #expect(store.currentState.counters.count == 1)
+    #expect(store.currentState.counters[id: ids[0]] == nil)
+    #expect(store.currentState.counters[id: ids[1]] != nil)
+  }
+
+  @Test("ForEach calculates total across all elements")
+  func testTotalCalculation() async throws {
+    let store = Store(
+      initialState: CountersApp.State(),
+      reducer: CountersApp()
+    )
+
+    // Add three counters
+    await store.send(.addCounter)
+    await store.send(.addCounter)
+    await store.send(.addCounter)
+
+    let ids = store.currentState.counters.ids
+
+    // Increment counters to different values
+    await store.send(.counters(.element(id: ids[0], action: .increment)))
+    await store.send(.counters(.element(id: ids[0], action: .increment)))
+    await store.send(.counters(.element(id: ids[1], action: .increment)))
+    await store.send(.counters(.element(id: ids[1], action: .increment)))
+    await store.send(.counters(.element(id: ids[1], action: .increment)))
+
+    // Total should be 2 + 3 + 0 = 5
+    #expect(store.currentState.totalCount == 5)
+
+    // Remove one counter
+    await store.send(.removeCounter(id: ids[1]))
+    #expect(store.currentState.totalCount == 2)
+  }
+}
+
+// MARK: - IdentifiedArray Tests
+
+@Suite("IdentifiedArray Tests")
+struct IdentifiedArrayTests {
+  struct Item: Equatable, Identifiable {
+    let id: Int
+    var name: String
+  }
+
+  @Test("IdentifiedArray initializes empty")
+  func testInitEmpty() {
+    let array = IdentifiedArray<Int, Item>(id: \.id)
+    #expect(array.isEmpty)
+    #expect(array.count == 0)
+  }
+
+  @Test("IdentifiedArray appends elements")
+  func testAppend() {
+    var array = IdentifiedArray<Int, Item>(id: \.id)
+    array.append(Item(id: 1, name: "One"))
+    array.append(Item(id: 2, name: "Two"))
+
+    #expect(array.count == 2)
+    #expect(array[id: 1]?.name == "One")
+    #expect(array[id: 2]?.name == "Two")
+  }
+
+  @Test("IdentifiedArray prevents duplicate IDs")
+  func testPreventsDuplicates() {
+    var array = IdentifiedArray<Int, Item>(id: \.id)
+    array.append(Item(id: 1, name: "First"))
+    array.append(Item(id: 1, name: "Duplicate"))
+
+    #expect(array.count == 1)
+    #expect(array[id: 1]?.name == "First")
+  }
+
+  @Test("IdentifiedArray removes by ID")
+  func testRemoveByID() {
+    var array = IdentifiedArray<Int, Item>(id: \.id)
+    array.append(Item(id: 1, name: "One"))
+    array.append(Item(id: 2, name: "Two"))
+    array.append(Item(id: 3, name: "Three"))
+
+    let removed = array.remove(id: 2)
+    #expect(removed?.name == "Two")
+    #expect(array.count == 2)
+    #expect(array[id: 2] == nil)
+    #expect(array[id: 1]?.name == "One")
+    #expect(array[id: 3]?.name == "Three")
+  }
+
+  @Test("IdentifiedArray subscript updates elements")
+  func testSubscriptUpdate() {
+    var array = IdentifiedArray<Int, Item>(id: \.id)
+    array.append(Item(id: 1, name: "One"))
+
+    array[id: 1] = Item(id: 1, name: "Updated")
+    #expect(array[id: 1]?.name == "Updated")
+  }
+
+  @Test("IdentifiedArray subscript removes with nil")
+  func testSubscriptRemoveWithNil() {
+    var array = IdentifiedArray<Int, Item>(id: \.id)
+    array.append(Item(id: 1, name: "One"))
+    array.append(Item(id: 2, name: "Two"))
+
+    array[id: 1] = nil
+    #expect(array.count == 1)
+    #expect(array[id: 1] == nil)
+    #expect(array[id: 2]?.name == "Two")
   }
 }

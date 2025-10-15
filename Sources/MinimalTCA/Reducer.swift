@@ -1,6 +1,7 @@
-// 186 Lines by Claude Sonnet
+// 323 Lines by Claude Sonnet
 // Minimal TCA: Core Reducer protocol with composition support (Android-compatible, no Combine)
 // Extended with Scope operator for parent/child composition
+// Extended with ForEach operator for collection-based composition
 
 import Foundation
 
@@ -198,6 +199,151 @@ extension Reducer {
   where Child.State == ChildState, Child.Action == ChildAction, Action: Sendable {
     self.combined(
       with: Scope(state: toChildState, action: toChildAction, child: child)
+    )
+  }
+}
+
+// MARK: - ForEach Reducer
+
+/// Embeds a child reducer for each element in a collection
+///
+/// `ForEach` allows you to run a child reducer on each element of a collection,
+/// routing actions by ID to the appropriate element.
+///
+/// Example:
+/// ```swift
+/// struct TodosReducer: Reducer {
+///   struct State {
+///     var todos: IdentifiedArrayOf<Todo.State>
+///   }
+///
+///   enum Action {
+///     case todos(IdentifiedAction<UUID, Todo.Action>)
+///   }
+///
+///   func reduce(into state: inout State, action: Action) -> Effect<Action> {
+///     ForEach(
+///       state: \.todos,
+///       action: CasePath(
+///         extract: { if case .todos(let a) = $0 { return a.elementCasePath.extract(from: a) } else { return nil } },
+///         embed: { .todos(.element(id: $0.id, action: $0.action)) }
+///       ),
+///       element: TodoReducer()
+///     )
+///     .reduce(into: &state, action: action)
+///   }
+/// }
+/// ```
+public struct ForEach<ParentState, ParentAction: Sendable, ID: Hashable & Sendable, Element: Reducer>: Reducer
+where Element.State: Sendable, Element.Action: Sendable, Element: Sendable {
+  @usableFromInline
+  let toElementsState: WritableKeyPath<ParentState, IdentifiedArray<ID, Element.State>>
+  @usableFromInline
+  let toElementAction: CasePath<ParentAction, (id: ID, action: Element.Action)>
+  @usableFromInline
+  let element: Element
+
+  /// Creates a forEach reducer
+  ///
+  /// - Parameters:
+  ///   - toElementsState: Key path to the identified array of element states
+  ///   - toElementAction: Case path that extracts (id, action) tuples
+  ///   - element: The child reducer to run on each element
+  public init(
+    state toElementsState: WritableKeyPath<ParentState, IdentifiedArray<ID, Element.State>>,
+    action toElementAction: CasePath<ParentAction, (id: ID, action: Element.Action)>,
+    element: Element
+  ) {
+    self.toElementsState = toElementsState
+    self.toElementAction = toElementAction
+    self.element = element
+  }
+
+  public func reduce(
+    into state: inout ParentState,
+    action: ParentAction
+  ) -> Effect<ParentAction> {
+    // Extract the (id, elementAction) from the parent action
+    guard let (id, elementAction) = toElementAction.extract(from: action) else {
+      return .none
+    }
+
+    // Ensure the element exists
+    guard state[keyPath: toElementsState][id: id] != nil else {
+      // Element was removed - this is not an error, just ignore
+      return .none
+    }
+
+    // Run the element reducer on the specific element
+    let elementEffect = element.reduce(
+      into: &state[keyPath: toElementsState][id: id]!,
+      action: elementAction
+    )
+
+    // Transform element effects back to parent effects
+    return transformEffect(elementEffect, id: id)
+  }
+
+  private func transformEffect(
+    _ elementEffect: Effect<Element.Action>,
+    id: ID
+  ) -> Effect<ParentAction> {
+    switch elementEffect.operation {
+    case .none:
+      return .none
+
+    case let .run(priority, operation):
+      return .run(priority: priority) { [toElementAction] send in
+        let elementSend = Send<Element.Action> { elementAction in
+          Task {
+            await send(toElementAction.embed((id, elementAction)))
+          }
+        }
+        await operation(elementSend)
+      }
+    }
+  }
+}
+
+// MARK: - ForEach Convenience Extension
+
+extension Reducer {
+  /// Embeds a child reducer for each element in an identified array
+  ///
+  /// Use this to manage collections of child features.
+  ///
+  /// Example:
+  /// ```swift
+  /// struct TodosReducer: Reducer {
+  ///   var body: some Reducer<State, Action> {
+  ///     Reduce { state, action in
+  ///       // Parent logic (add/remove todos)
+  ///     }
+  ///     .forEach(
+  ///       \.todos,
+  ///       action: CasePath(
+  ///         extract: { /* extract (id, action) */ },
+  ///         embed: { .todos(.element(id: $0, action: $1)) }
+  ///       ),
+  ///       element: TodoReducer()
+  ///     )
+  ///   }
+  /// }
+  /// ```
+  ///
+  /// - Parameters:
+  ///   - toElementsState: Key path to identified array
+  ///   - toElementAction: Case path to (id, action) tuple
+  ///   - element: The child reducer
+  /// - Returns: A combined reducer
+  public func forEach<ID: Hashable & Sendable, ElementState: Sendable, ElementAction: Sendable, Element: Reducer>(
+    _ toElementsState: WritableKeyPath<State, IdentifiedArray<ID, ElementState>>,
+    action toElementAction: CasePath<Action, (id: ID, action: ElementAction)>,
+    element: Element
+  ) -> CombinedReducer<Self, ForEach<State, Action, ID, Element>>
+  where Element.State == ElementState, Element.Action == ElementAction, Action: Sendable {
+    self.combined(
+      with: ForEach(state: toElementsState, action: toElementAction, element: element)
     )
   }
 }

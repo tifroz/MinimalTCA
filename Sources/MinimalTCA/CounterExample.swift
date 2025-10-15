@@ -1,6 +1,7 @@
-// 176 Lines by Claude Sonnet
+// 301 Lines by Claude Sonnet
 // Minimal TCA: Complete counter example demonstrating the architecture
 // Extended with parent/child composition using Scope
+// Extended with forEach example for managing collections
 
 import Foundation
 
@@ -15,9 +16,16 @@ import Foundation
 // MARK: - Counter Feature
 
 struct CounterReducer: Reducer {
-  struct State: Equatable {
+  struct State: Equatable, Identifiable {
+    let id: UUID
     var count: Int = 0
     var isLoading: Bool = false
+
+    init(id: UUID = UUID(), count: Int = 0, isLoading: Bool = false) {
+      self.id = id
+      self.count = count
+      self.isLoading = isLoading
+    }
   }
 
   enum Action: Equatable {
@@ -211,4 +219,158 @@ func compositionExample() async {
   // Child actions still work
   await store.send(.counter(.decrement))
   print("Count: \(store.currentState.counter.count)") // 0
+}
+
+// MARK: - ForEach Collection Example
+
+/// Example: A parent feature that manages multiple counters
+///
+/// This demonstrates forEach - managing a dynamic collection of child features
+
+struct CountersApp: Reducer {
+  struct State: Equatable, Sendable {
+    var counters: IdentifiedArrayOf<CounterReducer.State>
+    var totalCount: Int
+
+    init(counters: IdentifiedArrayOf<CounterReducer.State> = IdentifiedArrayOf<CounterReducer.State>()) {
+      self.counters = counters
+      self.totalCount = counters.reduce(0) { $0 + $1.count }
+    }
+  }
+
+  enum Action: Equatable, Sendable {
+    case addCounter
+    case removeCounter(id: UUID)
+    case counters(IdentifiedActionOf<CounterReducer>)
+    case updateTotal
+  }
+
+  func reduce(into state: inout State, action: Action) -> Effect<Action> {
+    // First, handle collection-level operations
+    switch action {
+    case .addCounter:
+      state.counters.append(CounterReducer.State())
+      return .send(.updateTotal)
+
+    case let .removeCounter(id):
+      state.counters.remove(id: id)
+      return .send(.updateTotal)
+
+    case .counters:
+      // Let forEach handle individual counter actions
+      break
+
+    case .updateTotal:
+      state.totalCount = state.counters.reduce(0) { $0 + $1.count }
+      return .none
+    }
+
+    // Then run forEach for individual counter logic
+    let elementEffect = ForEach(
+      state: \.counters,
+      action: CasePath(
+        extract: { action in
+          if case .counters(let identifiedAction) = action,
+             case .element(let id, let counterAction) = identifiedAction {
+            return (id, counterAction)
+          }
+          return nil
+        },
+        embed: { (id, counterAction) in
+          .counters(.element(id: id, action: counterAction))
+        }
+      ),
+      element: CounterReducer()
+    )
+    .reduce(into: &state, action: action)
+
+    // After any counter action, update total
+    return .merge(elementEffect, .send(.updateTotal))
+  }
+}
+
+// MARK: - Alternative: Using .forEach() Extension
+
+struct CountersAppV2: Reducer {
+  struct State: Equatable, Sendable {
+    var counters: IdentifiedArrayOf<CounterReducer.State>
+  }
+
+  enum Action: Equatable, Sendable {
+    case addCounter
+    case removeCounter(id: UUID)
+    case counters(IdentifiedActionOf<CounterReducer>)
+  }
+
+  private struct ParentLogic: Reducer {
+    func reduce(into state: inout State, action: Action) -> Effect<Action> {
+      switch action {
+      case .addCounter:
+        state.counters.append(CounterReducer.State())
+        return .none
+
+      case let .removeCounter(id):
+        state.counters.remove(id: id)
+        return .none
+
+      case .counters:
+        return .none
+      }
+    }
+  }
+
+  func reduce(into state: inout State, action: Action) -> Effect<Action> {
+    // Compose parent logic with forEach
+    ParentLogic()
+      .forEach(
+        \.counters,
+        action: CasePath(
+          extract: { action in
+            if case .counters(let identifiedAction) = action,
+               case .element(let id, let counterAction) = identifiedAction {
+              return (id, counterAction)
+            }
+            return nil
+          },
+          embed: { (id, counterAction) in
+            .counters(.element(id: id, action: counterAction))
+          }
+        ),
+        element: CounterReducer()
+      )
+      .reduce(into: &state, action: action)
+  }
+}
+
+// MARK: - Usage Example (Collections)
+
+@MainActor
+func collectionsExample() async {
+  let store = Store(
+    initialState: CountersApp.State(),
+    reducer: CountersApp()
+  )
+
+  // Add some counters
+  await store.send(.addCounter)
+  await store.send(.addCounter)
+  await store.send(.addCounter)
+  print("Counters: \(store.currentState.counters.count)") // 3
+
+  // Get the first counter's ID
+  guard let firstID = store.currentState.counters.first?.id else { return }
+
+  // Increment specific counter
+  await store.send(.counters(.element(id: firstID, action: .increment)))
+  print("First counter: \(store.currentState.counters[id: firstID]?.count ?? 0)") // 1
+  print("Total: \(store.currentState.totalCount)") // 1
+
+  // Increment again
+  await store.send(.counters(.element(id: firstID, action: .increment)))
+  print("Total: \(store.currentState.totalCount)") // 2
+
+  // Remove a counter
+  await store.send(.removeCounter(id: firstID))
+  print("Counters: \(store.currentState.counters.count)") // 2
+  print("Total: \(store.currentState.totalCount)") // 0
 }

@@ -63,7 +63,7 @@ extension Effect {
   /// - Returns: An effect
   public static func send(_ action: Action) -> Self where Action: Sendable {
     .run { send in
-      await send(action)
+      send(action)
     }
   }
 
@@ -81,6 +81,28 @@ extension Effect {
         }
       } catch {
         // Silently ignore errors
+      }
+    }
+  }
+}
+
+// MARK: - Transforming Effects
+
+extension Effect {
+  /// Transforms the actions emitted by this effect
+  ///
+  /// - Parameter transform: A function to transform actions
+  /// - Returns: A new effect with transformed actions
+  public func map<NewAction>(_ transform: @escaping @Sendable (Action) -> NewAction) -> Effect<NewAction> where NewAction: Sendable {
+    switch operation {
+    case .none:
+      return .none
+
+    case let .run(priority, operation):
+      return .run(priority: priority) { send in
+        await operation(Send { action in
+          send(transform(action))
+        })
       }
     }
   }
