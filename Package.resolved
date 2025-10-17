@@ -1,0 +1,15 @@
+{
+  "originHash" : "6b0a68a34b813d4e053453ae74b7c8e2518fae851aae6e5b99f1d41a743ec14e",
+  "pins" : [
+    {
+      "identity" : "skip",
+      "kind" : "remoteSourceControl",
+      "location" : "https://source.skip.tools/skip.git",
+      "state" : {
+        "revision" : "9e88c24b32ab42b03e90e3c8fc484f883690fd9c",
+        "version" : "1.6.27"
+      }
+    }
+  ],
+  "version" : 3
+}
