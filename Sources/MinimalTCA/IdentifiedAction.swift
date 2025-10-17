@@ -42,26 +42,11 @@ extension IdentifiedAction {
 
 // MARK: - Conformances
 
+#if !SKIP
 // Note: Swift automatically synthesizes Equatable/Hashable when Action conforms
-// For Skip/Kotlin, we provide manual implementations
-extension IdentifiedAction: Equatable where Action: Equatable {
-  public static func == (lhs: Self, rhs: Self) -> Bool {
-    switch (lhs, rhs) {
-    case let (.element(lhsId, lhsAction), .element(rhsId, rhsAction)):
-      return lhsId == rhsId && lhsAction == rhsAction
-    }
-  }
-}
-
-extension IdentifiedAction: Hashable where Action: Hashable {
-  public func hash(into hasher: inout Hasher) {
-    switch self {
-    case let .element(id, action):
-      hasher.combine(id)
-      hasher.combine(action)
-    }
-  }
-}
+extension IdentifiedAction: Equatable where Action: Equatable {}
+extension IdentifiedAction: Hashable where Action: Hashable {}
+#endif
 
 #if !SKIP
 // MARK: - Type Alias
