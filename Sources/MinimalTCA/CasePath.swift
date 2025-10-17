@@ -60,13 +60,12 @@ public struct CasePath<Root, Value>: Sendable where Root: Sendable, Value: Senda
   public func embed(_ value: Value) -> Root {
     _embed(value)
   }
-}
 
-// MARK: - Convenience Initializer
-
-extension CasePath where Value == Void {
   /// Creates a case path for enum cases without associated values
-  public init(embed: @escaping @Sendable () -> Root) {
-    self.init(extract: { _ in () }, embed: { embed() })
+  ///
+  /// - Parameter embed: A function that produces the enum case
+  /// - Returns: A case path for a case without associated values
+  public static func void(embed: @escaping @Sendable () -> Root) -> CasePath<Root, Void> {
+    CasePath<Root, Void>(extract: { _ in () }, embed: { embed() })
   }
 }

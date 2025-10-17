@@ -3,6 +3,16 @@
 
 import Foundation
 
+/// Represents an operation that an effect can perform
+@usableFromInline
+internal enum EffectOperation<Action>: Sendable {
+  case none
+  case run(
+    priority: TaskPriority?,
+    operation: @Sendable (Send<Action>) async -> Void
+  )
+}
+
 /// Represents an asynchronous unit of work that can emit actions
 ///
 /// Effects are returned from reducers to perform side effects like network requests,
@@ -10,19 +20,10 @@ import Foundation
 /// and Swift Concurrency, making it Android-compatible.
 public struct Effect<Action>: Sendable {
   @usableFromInline
-  internal enum Operation: Sendable {
-    case none
-    case run(
-      priority: TaskPriority?,
-      operation: @Sendable (Send<Action>) async -> Void
-    )
-  }
+  internal let operation: EffectOperation<Action>
 
   @usableFromInline
-  internal let operation: Operation
-
-  @usableFromInline
-  internal init(operation: Operation) {
+  internal init(operation: EffectOperation<Action>) {
     self.operation = operation
   }
 }

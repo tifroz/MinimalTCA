@@ -18,10 +18,10 @@ public final class TestStore<State, Action> {
   /// - Parameters:
   ///   - initialState: The initial state
   ///   - reducer: The reducer to test
-  public init<R: Reducer>(
+  public init(
     initialState: State,
-    reducer: R
-  ) where R.State == State, R.Action == Action {
+    reducer: any Reducer<State, Action>
+  ) {
     self.state = initialState
     self.reducer = reducer
   }

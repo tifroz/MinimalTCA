@@ -25,7 +25,7 @@ public enum IdentifiedAction<ID: Hashable & Sendable, Action: Sendable>: Sendabl
 
 extension IdentifiedAction {
   /// Creates a case path for extracting element actions
-  public static var elementCasePath: CasePath<Self, (id: ID, action: Action)> {
+  public static func elementCasePath() -> CasePath<Self, (id: ID, action: Action)> {
     CasePath(
       extract: { action in
         if case .element(let id, let innerAction) = action {
@@ -40,11 +40,31 @@ extension IdentifiedAction {
 
 // MARK: - Conformances
 
-extension IdentifiedAction: Equatable where Action: Equatable {}
-extension IdentifiedAction: Hashable where Action: Hashable {}
+// Note: Swift automatically synthesizes Equatable/Hashable when Action conforms
+// For Skip/Kotlin, we provide manual implementations
+extension IdentifiedAction: Equatable where Action: Equatable {
+  public static func == (lhs: Self, rhs: Self) -> Bool {
+    switch (lhs, rhs) {
+    case let (.element(lhsId, lhsAction), .element(rhsId, rhsAction)):
+      return lhsId == rhsId && lhsAction == rhsAction
+    }
+  }
+}
 
+extension IdentifiedAction: Hashable where Action: Hashable {
+  public func hash(into hasher: inout Hasher) {
+    switch self {
+    case let .element(id, action):
+      hasher.combine(id)
+      hasher.combine(action)
+    }
+  }
+}
+
+#if !SKIP
 // MARK: - Type Alias
 
 /// A convenience type alias for identified actions of a given reducer
 public typealias IdentifiedActionOf<R: Reducer> = IdentifiedAction<R.State.ID, R.Action>
 where R.State: Identifiable
+#endif
