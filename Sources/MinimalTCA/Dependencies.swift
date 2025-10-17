@@ -1,9 +1,9 @@
 // 69 Lines by Claude Sonnet
 // Minimal TCA: Simple dependency injection system (Android-compatible, no Combine)
 
+#if !SKIP
 import Foundation
 
-#if !SKIP
 /// A property wrapper for accessing dependencies
 ///
 /// Dependencies are resolved from the current context, allowing you to swap
@@ -20,7 +20,6 @@ public struct Dependency<Value>: @unchecked Sendable {
     DependencyValues.current[keyPath: keyPath]
   }
 }
-#endif
 
 /// A collection of dependency values
 ///
@@ -36,12 +35,8 @@ public struct Dependency<Value>: @unchecked Sendable {
 public struct DependencyValues: Sendable {
   private var storage: [ObjectIdentifier: any Sendable] = [:]
 
-  #if !SKIP
   @TaskLocal
   static var current = DependencyValues()
-  #else
-  static var current = DependencyValues()
-  #endif
 
   subscript<Key: DependencyKey>(key: Key.Type) -> Key.Value {
     get {
@@ -66,17 +61,9 @@ public struct DependencyValues: Sendable {
   ) async rethrows -> T {
     var values = current
     updateValues(&values)
-    #if !SKIP
     return try await $current.withValue(values) {
       try await operation()
     }
-    #else
-    // For Skip/Kotlin: simple implementation without task-local storage
-    let oldValue = current
-    current = values
-    defer { current = oldValue }
-    return try await operation()
-    #endif
   }
 }
 
@@ -85,3 +72,4 @@ public protocol DependencyKey {
   associatedtype Value: Sendable
   static var defaultValue: Value { get }
 }
+#endif

@@ -1,6 +1,7 @@
 // 109 Lines by Claude Sonnet
 // Minimal TCA: TestStore for deterministic testing (Android-compatible, no Combine)
 
+#if !SKIP
 import Foundation
 
 /// A testable version of Store that provides assertions for state changes and actions
@@ -134,3 +135,4 @@ extension TestStore where State: Equatable {
     #endif
   }
 }
+#endif

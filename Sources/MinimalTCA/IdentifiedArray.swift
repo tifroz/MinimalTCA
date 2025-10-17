@@ -16,26 +16,58 @@ where ID: Sendable, Element: Sendable {
   private var idToIndex: [ID: Int]
   private let idExtractor: (Element) -> ID
 
-  /// Creates an empty identified array
+  /// Creates an empty identified array with a closure-based ID extractor
+  ///
+  /// - Parameter id: A closure that extracts the element's identifier
+  public init(id: @escaping (Element) -> ID) {
+    self.elements = []
+    self.idToIndex = [:]
+    self.idExtractor = id
+  }
+
+  #if !SKIP
+  /// Creates an empty identified array with a KeyPath-based ID extractor
   ///
   /// - Parameter id: A key path to the element's identifier
   public init(id: KeyPath<Element, ID>) {
-    self.elements = []
-    self.idToIndex = [:]
-    self.idExtractor = { element in element[keyPath: id] }
+    self.init(id: { element in element[keyPath: id] })
   }
+  #endif
 
-  /// Creates an identified array from a sequence
+  /// Creates an identified array from an array with a closure-based ID extractor
   ///
   /// - Parameters:
   ///   - elements: The elements to initialize with
-  ///   - id: A key path to the element's identifier
-  public init<S: Sequence>(_ elements: S, id: KeyPath<Element, ID>) where S.Element == Element, KeyPath<Element, ID>: Sendable {
+  ///   - id: A closure that extracts the element's identifier
+  public init(_ elements: [Element], id: @escaping (Element) -> ID) {
     self.init(id: id)
     for element in elements {
       self.append(element)
     }
   }
+
+  #if !SKIP
+  /// Creates an identified array from an array with a KeyPath-based ID extractor
+  ///
+  /// - Parameters:
+  ///   - elements: The elements to initialize with
+  ///   - id: A key path to the element's identifier
+  public init(_ elements: [Element], id: KeyPath<Element, ID>) where KeyPath<Element, ID>: Sendable {
+    self.init(elements, id: { element in element[keyPath: id] })
+  }
+
+  /// Creates an identified array from a sequence with a KeyPath-based ID extractor
+  ///
+  /// - Parameters:
+  ///   - elements: The elements to initialize with
+  ///   - id: A key path to the element's identifier
+  public init<S: Sequence>(_ elements: S, id: KeyPath<Element, ID>) where S.Element == Element, KeyPath<Element, ID>: Sendable {
+    self.init(id: { element in element[keyPath: id] })
+    for element in elements {
+      self.append(element)
+    }
+  }
+  #endif
 
   /// Returns all IDs in the array, in order
   public var ids: [ID] {
@@ -164,18 +196,29 @@ extension IdentifiedArray {
 
 // MARK: - Identifiable Convenience
 
+#if !SKIP
 extension IdentifiedArray where Element: Identifiable, ID == Element.ID {
   /// Creates an empty identified array for Identifiable elements
   public init() {
-    self.init(id: \.id)
+    self.init(id: { $0.id })
+  }
+
+  /// Creates an identified array from an array of Identifiable elements
+  public init(_ elements: [Element]) {
+    self.init(elements, id: { $0.id })
   }
 
   /// Creates an identified array from a sequence of Identifiable elements
   public init<S: Sequence>(_ elements: S) where S.Element == Element {
-    self.init(elements, id: \.id)
+    self.init(id: { $0.id })
+    for element in elements {
+      self.append(element)
+    }
   }
 }
+#endif
 
+#if !SKIP
 // MARK: - Equatable
 
 extension IdentifiedArray: Equatable where Element: Equatable {
@@ -205,6 +248,7 @@ extension IdentifiedArray: Encodable where Element: Encodable {
     try elements.encode(to: encoder)
   }
 }
+#endif
 
 // MARK: - Type Alias
 

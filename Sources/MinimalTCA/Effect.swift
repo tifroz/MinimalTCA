@@ -68,6 +68,7 @@ extension Effect {
     }
   }
 
+  #if !SKIP
   /// Creates an effect from an async sequence
   ///
   /// - Parameter sequence: The async sequence to consume
@@ -85,6 +86,7 @@ extension Effect {
       }
     }
   }
+  #endif
 }
 
 // MARK: - Transforming Effects
