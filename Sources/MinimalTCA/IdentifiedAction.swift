@@ -23,6 +23,7 @@ public enum IdentifiedAction<ID: Hashable & Sendable, Action: Sendable>: Sendabl
 
 // MARK: - Convenience
 
+#if !SKIP
 extension IdentifiedAction {
   /// Creates a case path for extracting element actions
   public static func elementCasePath() -> CasePath<Self, (id: ID, action: Action)> {
@@ -37,6 +38,7 @@ extension IdentifiedAction {
     )
   }
 }
+#endif
 
 // MARK: - Conformances
 

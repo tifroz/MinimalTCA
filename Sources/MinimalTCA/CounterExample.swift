@@ -277,7 +277,7 @@ struct CountersApp: Reducer {
           return nil
         },
         embed: { (id, counterAction) in
-          .counters(.element(id: id, action: counterAction))
+          .counters(IdentifiedAction.element(id: id, action: counterAction))
         }
       ),
       element: CounterReducer()
@@ -333,7 +333,7 @@ struct CountersAppV2: Reducer {
             return nil
           },
           embed: { (id, counterAction) in
-            .counters(.element(id: id, action: counterAction))
+            .counters(IdentifiedAction.element(id: id, action: counterAction))
           }
         ),
         element: CounterReducer()
@@ -361,12 +361,12 @@ func collectionsExample() async {
   guard let firstID = store.currentState.counters.first?.id else { return }
 
   // Increment specific counter
-  await store.send(.counters(.element(id: firstID, action: .increment)))
+  await store.send(.counters(IdentifiedAction.element(id: firstID, action: CounterReducer.Action.increment)))
   print("First counter: \(store.currentState.counters[id: firstID]?.count ?? 0)") // 1
   print("Total: \(store.currentState.totalCount)") // 1
 
   // Increment again
-  await store.send(.counters(.element(id: firstID, action: .increment)))
+  await store.send(.counters(IdentifiedAction.element(id: firstID, action: CounterReducer.Action.increment)))
   print("Total: \(store.currentState.totalCount)") // 2
 
   // Remove a counter
